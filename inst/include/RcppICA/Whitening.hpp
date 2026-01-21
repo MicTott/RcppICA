@@ -125,12 +125,13 @@ public:
 
 } // namespace RcppICA
 
-// Include Spectra whitener after namespace declaration
+// Include Spectra and sparse whiteners after namespace declaration
 #include "WhiteningSpectra.hpp"
+#include "WhiteningSparseCov.hpp"
 
 namespace RcppICA {
 
-// Factory function for whitening
+// Factory function for whitening (dense matrices)
 template<typename Scalar = double>
 WhiteningResult<Scalar> whiten(
     const Eigen::Matrix<Scalar, Eigen::Dynamic, Eigen::Dynamic>& X,
@@ -149,6 +150,21 @@ WhiteningResult<Scalar> whiten(
         EigenWhitener<Scalar> whitener;
         return whitener.whiten(X, n_components);
     }
+}
+
+// Factory function for whitening (sparse matrices)
+// For sparse input, always use sparse-aware covariance computation
+// This avoids materializing the dense centered matrix, saving massive memory
+template<typename Scalar = double>
+WhiteningResult<Scalar> whiten(
+    const Eigen::SparseMatrix<Scalar>& X_sparse,
+    int n_components,
+    WhiteningMethod method = WhiteningMethod::SPECTRA)
+{
+    // For sparse matrices, use sparse-aware covariance computation
+    // Ignore method parameter - sparse covariance is always optimal
+    SparseWhitener<Scalar> whitener;
+    return whitener.whiten(X_sparse, n_components);
 }
 
 } // namespace RcppICA

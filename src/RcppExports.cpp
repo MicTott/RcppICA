@@ -46,10 +46,46 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// cpp_fastICA_sparse
+List cpp_fastICA_sparse(const Eigen::SparseMatrix<double>& X_sparse, int n_comp, int alg_type, int fun_type, double alpha, int whiten_method, int max_iter, double tol, bool verbose, int n_threads, unsigned int seed);
+RcppExport SEXP _RcppICA_cpp_fastICA_sparse(SEXP X_sparseSEXP, SEXP n_compSEXP, SEXP alg_typeSEXP, SEXP fun_typeSEXP, SEXP alphaSEXP, SEXP whiten_methodSEXP, SEXP max_iterSEXP, SEXP tolSEXP, SEXP verboseSEXP, SEXP n_threadsSEXP, SEXP seedSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::SparseMatrix<double>& >::type X_sparse(X_sparseSEXP);
+    Rcpp::traits::input_parameter< int >::type n_comp(n_compSEXP);
+    Rcpp::traits::input_parameter< int >::type alg_type(alg_typeSEXP);
+    Rcpp::traits::input_parameter< int >::type fun_type(fun_typeSEXP);
+    Rcpp::traits::input_parameter< double >::type alpha(alphaSEXP);
+    Rcpp::traits::input_parameter< int >::type whiten_method(whiten_methodSEXP);
+    Rcpp::traits::input_parameter< int >::type max_iter(max_iterSEXP);
+    Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
+    Rcpp::traits::input_parameter< bool >::type verbose(verboseSEXP);
+    Rcpp::traits::input_parameter< int >::type n_threads(n_threadsSEXP);
+    Rcpp::traits::input_parameter< unsigned int >::type seed(seedSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_fastICA_sparse(X_sparse, n_comp, alg_type, fun_type, alpha, whiten_method, max_iter, tol, verbose, n_threads, seed));
+    return rcpp_result_gen;
+END_RCPP
+}
+// cpp_whiten_sparse
+List cpp_whiten_sparse(const Eigen::SparseMatrix<double>& X_sparse, int n_comp, int method);
+RcppExport SEXP _RcppICA_cpp_whiten_sparse(SEXP X_sparseSEXP, SEXP n_compSEXP, SEXP methodSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::SparseMatrix<double>& >::type X_sparse(X_sparseSEXP);
+    Rcpp::traits::input_parameter< int >::type n_comp(n_compSEXP);
+    Rcpp::traits::input_parameter< int >::type method(methodSEXP);
+    rcpp_result_gen = Rcpp::wrap(cpp_whiten_sparse(X_sparse, n_comp, method));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_RcppICA_cpp_fastICA_dense", (DL_FUNC) &_RcppICA_cpp_fastICA_dense, 11},
     {"_RcppICA_cpp_whiten", (DL_FUNC) &_RcppICA_cpp_whiten, 3},
+    {"_RcppICA_cpp_fastICA_sparse", (DL_FUNC) &_RcppICA_cpp_fastICA_sparse, 11},
+    {"_RcppICA_cpp_whiten_sparse", (DL_FUNC) &_RcppICA_cpp_whiten_sparse, 3},
     {NULL, NULL, 0}
 };
 

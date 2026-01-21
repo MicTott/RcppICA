@@ -119,12 +119,14 @@ fastICA <- function(X,
     whiten.method <- match.arg(whiten.method)
 
     # Input validation
-    if (!is.matrix(X) && !inherits(X, "dgCMatrix")) {
+    is_sparse <- inherits(X, "dgCMatrix")
+
+    if (!is.matrix(X) && !is_sparse) {
         X <- as.matrix(X)
     }
 
-    if (!is.numeric(X)) {
-        stop("X must be a numeric matrix")
+    if (!is_sparse && !is.numeric(X)) {
+        stop("X must be a numeric matrix or dgCMatrix")
     }
 
     n <- nrow(X)
@@ -162,26 +164,39 @@ fastICA <- function(X,
     alg_code <- switch(alg.typ, parallel = 0L, deflation = 1L)
     whiten_code <- switch(whiten.method, svd = 0L, eigen = 1L, spectra = 2L)
 
-    # Handle sparse matrices (convert to dense for now)
-    # TODO: Implement sparse-specific path if beneficial
-    if (inherits(X, "dgCMatrix")) {
-        X <- as.matrix(X)
+    # Route sparse and dense matrices to appropriate implementations
+    if (is_sparse) {
+        # Use sparse-aware implementation (major memory savings!)
+        # This avoids materializing the dense centered matrix
+        result <- cpp_fastICA_sparse(
+            X_sparse = X,
+            n_comp = n.comp,
+            alg_type = alg_code,
+            fun_type = fun_code,
+            alpha = alpha,
+            whiten_method = whiten_code,
+            max_iter = maxit,
+            tol = tol,
+            verbose = verbose,
+            n_threads = n.threads,
+            seed = seed
+        )
+    } else {
+        # Use standard dense implementation
+        result <- cpp_fastICA_dense(
+            X = X,
+            n_comp = n.comp,
+            alg_type = alg_code,
+            fun_type = fun_code,
+            alpha = alpha,
+            whiten_method = whiten_code,
+            max_iter = maxit,
+            tol = tol,
+            verbose = verbose,
+            n_threads = n.threads,
+            seed = seed
+        )
     }
-
-    # Call C++ implementation
-    result <- cpp_fastICA_dense(
-        X = X,
-        n_comp = n.comp,
-        alg_type = alg_code,
-        fun_type = fun_code,
-        alpha = alpha,
-        whiten_method = whiten_code,
-        max_iter = maxit,
-        tol = tol,
-        verbose = verbose,
-        n_threads = n.threads,
-        seed = seed
-    )
 
     # Construct S4 result object with misc metadata
     misc <- list(

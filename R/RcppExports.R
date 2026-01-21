@@ -33,3 +33,35 @@ cpp_whiten <- function(X, n_comp, method) {
     .Call(`_RcppICA_cpp_whiten`, X, n_comp, method)
 }
 
+#' Fast Independent Component Analysis (Sparse Matrix Implementation)
+#'
+#' @param X_sparse Sparse matrix (dgCMatrix, observations x variables)
+#' @param n_comp Number of independent components to extract
+#' @param alg_type Algorithm type: 0 = parallel (symmetric), 1 = deflation
+#' @param fun_type Nonlinearity: 0 = logcosh, 1 = exp, 2 = cube
+#' @param alpha Parameter for logcosh (between 1 and 2)
+#' @param whiten_method Whitening method (ignored for sparse, always uses sparse covariance)
+#' @param max_iter Maximum iterations
+#' @param tol Convergence tolerance
+#' @param verbose Print progress
+#' @param n_threads Number of OpenMP threads (0 = auto)
+#' @param seed Random seed (0 = random)
+#' @return List with S, A, W, K, center, iterations, converged
+#'
+#' @keywords internal
+cpp_fastICA_sparse <- function(X_sparse, n_comp, alg_type, fun_type, alpha, whiten_method, max_iter, tol, verbose, n_threads, seed) {
+    .Call(`_RcppICA_cpp_fastICA_sparse`, X_sparse, n_comp, alg_type, fun_type, alpha, whiten_method, max_iter, tol, verbose, n_threads, seed)
+}
+
+#' Whitening for sparse matrices (for testing/debugging)
+#'
+#' @param X_sparse Sparse matrix (dgCMatrix)
+#' @param n_comp Number of components
+#' @param method Whitening method (ignored, always uses sparse covariance)
+#' @return List with X_whitened, K, K_inv, mean
+#'
+#' @keywords internal
+cpp_whiten_sparse <- function(X_sparse, n_comp, method) {
+    .Call(`_RcppICA_cpp_whiten_sparse`, X_sparse, n_comp, method)
+}
+
