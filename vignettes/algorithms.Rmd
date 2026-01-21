@@ -1,0 +1,487 @@
+---
+title: "Algorithm Guide: Choosing the Right Options"
+author: "Michael Totty"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Algorithm Guide: Choosing the Right Options}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 5
+)
+library(RcppICA)
+set.seed(123)
+```
+
+## Overview
+
+RcppICA implements the FastICA algorithm with several configurable options. This guide helps you choose the right settings for your data.
+
+## Algorithm Types: Parallel vs Deflation
+
+FastICA offers two approaches for extracting independent components:
+
+### Parallel (Symmetric) Algorithm
+
+**How it works**: Extracts all components simultaneously using symmetric orthogonalization.
+
+**Advantages**:
+- Usually faster, especially with multiple components
+- More stable convergence
+- Better parallelization with OpenMP
+- Recommended for most use cases
+
+**Disadvantages**:
+- May require more memory
+- Less control over component extraction order
+
+```{r parallel-example}
+# Generate test data
+n <- 500
+S <- cbind(
+  sin(seq(0, 10*pi, length.out = n)),
+  sign(sin(seq(0, 5*pi, length.out = n))),
+  rnorm(n)
+)
+A <- matrix(runif(9, 0.3, 0.7), 3, 3)
+X <- S %*% A
+
+# Parallel algorithm (default)
+result_parallel <- fastICA(X, n.comp = 3, alg.typ = "parallel", maxit = 200)
+cat("Parallel - Iterations:", result_parallel@misc$iterations,
+    "Converged:", result_parallel@misc$converged, "\n")
+```
+
+### Deflation Algorithm
+
+**How it works**: Extracts components one at a time, orthogonalizing each against previous ones using Gram-Schmidt.
+
+**Advantages**:
+- Can extract fewer components efficiently
+- More control over individual components
+- May work better when only first few components are needed
+
+**Disadvantages**:
+- Can be slower for many components
+- Components extracted later may be less accurate
+- Less parallelization benefit
+
+```{r deflation-example}
+# Deflation algorithm
+result_deflation <- fastICA(X, n.comp = 3, alg.typ = "deflation", maxit = 200)
+cat("Deflation - Iterations:", result_deflation@misc$iterations,
+    "Converged:", result_deflation@misc$converged, "\n")
+```
+
+### Comparing Results
+
+Both algorithms should find similar components (up to permutation and sign):
+
+```{r compare-algorithms}
+# Compare recovered sources (allowing for permutation)
+cors_parallel <- abs(cor(t(result_parallel@S), S))
+cors_deflation <- abs(cor(t(result_deflation@S), S))
+
+cat("Parallel recovery (best match per component):\n")
+print(round(apply(cors_parallel, 1, max), 3))
+
+cat("\nDeflation recovery (best match per component):\n")
+print(round(apply(cors_deflation, 1, max), 3))
+```
+
+### When to Use Which?
+
+**Use Parallel** (default) when:
+- Extracting many components (>3)
+- Speed is important
+- You have multiple CPU cores
+- Standard ICA applications
+
+**Use Deflation** when:
+- Extracting only 1-2 components from high-dimensional data
+- You need components in a specific order (by non-Gaussianity)
+- Memory is very limited
+
+## Nonlinearity Functions
+
+The nonlinearity function $g$ determines what type of independence ICA maximizes. RcppICA offers three options:
+
+### LogCosh (Default)
+
+**Function**: $g(u) = \tanh(\alpha u)$, $g'(u) = \alpha(1 - \tanh^2(\alpha u))$
+
+**Parameter**: $\alpha \in [1, 2]$ (default 1.0)
+
+**Characteristics**:
+- Most robust choice
+- Works well for both sub- and super-Gaussian distributions
+- Good default for unknown data distributions
+- $\alpha$ closer to 1: more robust
+- $\alpha$ closer to 2: approaches kurtosis
+
+```{r logcosh}
+# LogCosh with different alpha values
+result_alpha1 <- fastICA(X, n.comp = 3, fun = "logcosh", alpha = 1.0, maxit = 200)
+result_alpha2 <- fastICA(X, n.comp = 3, fun = "logcosh", alpha = 2.0, maxit = 200)
+
+cat("Alpha = 1.0 iterations:", result_alpha1@misc$iterations, "\n")
+cat("Alpha = 2.0 iterations:", result_alpha2@misc$iterations, "\n")
+```
+
+### Exponential
+
+**Function**: $g(u) = u \exp(-u^2/2)$, $g'(u) = (1 - u^2)\exp(-u^2/2)$
+
+**Characteristics**:
+- Best for super-Gaussian distributions (heavy tails, sparse)
+- Sensitive to outliers
+- Can converge faster for appropriate data
+- Not recommended for sub-Gaussian data
+
+```{r exp-function}
+# Create super-Gaussian source (sparse)
+S_super <- cbind(
+  rt(n, df = 3),  # Heavy-tailed
+  rcauchy(n, scale = 0.5),
+  rnorm(n)
+)
+X_super <- S_super %*% A
+
+# Exponential nonlinearity
+result_exp <- fastICA(X_super, n.comp = 3, fun = "exp", maxit = 200)
+cat("Exp function - Iterations:", result_exp@misc$iterations,
+    "Converged:", result_exp@misc$converged, "\n")
+
+# Compare with logcosh
+result_log <- fastICA(X_super, n.comp = 3, fun = "logcosh", maxit = 200)
+cat("LogCosh - Iterations:", result_log@misc$iterations, "\n")
+```
+
+### Cube (Kurtosis)
+
+**Function**: $g(u) = u^3$, $g'(u) = 3u^2$
+
+**Characteristics**:
+- Simplest, fastest computation
+- Maximizes kurtosis (4th moment)
+- Less robust to outliers
+- Good for well-behaved, light-tailed data
+- Can fail with heavy-tailed distributions
+
+```{r cube-function}
+# Cube nonlinearity
+result_cube <- fastICA(X, n.comp = 3, fun = "cube", maxit = 200)
+cat("Cube function - Iterations:", result_cube@misc$iterations,
+    "Converged:", result_cube@misc$converged, "\n")
+```
+
+### Nonlinearity Selection Guide
+
+**Use LogCosh** when:
+- You don't know the source distribution
+- General-purpose ICA
+- Robustness is important
+- Mixed distribution types
+
+**Use Exp** when:
+- Sources are known to be sparse or heavy-tailed
+- Financial data, natural images, audio with silence
+- Super-Gaussian distributions expected
+
+**Use Cube** when:
+- Sources are light-tailed (close to Gaussian)
+- Speed is critical and data is clean
+- Educational/research purposes
+- Not recommended for production use
+
+## Whitening Methods
+
+Whitening is a preprocessing step that makes the data uncorrelated with unit variance.
+
+### SVD-Based Whitening (Default)
+
+**How it works**: Uses Singular Value Decomposition (BDCSVD from Eigen)
+
+**Advantages**:
+- More numerically stable
+- Handles ill-conditioned data better
+- Recommended for most use cases
+- Slightly slower but more reliable
+
+```{r svd-whitening}
+# SVD whitening (default)
+result_svd <- fastICA(X, n.comp = 3, whiten.method = "svd", maxit = 200)
+cat("SVD whitening - Converged:", result_svd@misc$converged, "\n")
+```
+
+### Eigendecomposition Whitening
+
+**How it works**: Computes eigendecomposition of covariance matrix
+
+**Advantages**:
+- Can be faster when n >> m (many observations, few variables)
+- More traditional approach
+- Slightly less memory for wide matrices
+
+**Disadvantages**:
+- Can be numerically unstable for ill-conditioned data
+- May fail with singular matrices
+
+```{r eigen-whitening}
+# Eigen whitening
+result_eigen <- fastICA(X, n.comp = 3, whiten.method = "eigen", maxit = 200)
+cat("Eigen whitening - Converged:", result_eigen@misc$converged, "\n")
+
+# Both should give similar results
+cors <- abs(cor(t(result_svd@S), t(result_eigen@S)))
+cat("\nCorrelation between SVD and Eigen results:\n")
+print(round(apply(cors, 1, max), 3))
+```
+
+### Whitening Selection Guide
+
+**Use SVD** (default) when:
+- Standard use cases
+- Stability is important
+- Data may be ill-conditioned
+- Not sure which to use
+
+**Use Eigen** when:
+- Data is well-conditioned
+- Many observations, few variables (n >> m)
+- Marginal speed improvement needed
+
+## Convergence Parameters
+
+### Tolerance
+
+Controls when the algorithm stops based on change in unmixing matrix:
+
+```{r tolerance}
+# Loose tolerance (faster, less accurate)
+result_loose <- fastICA(X, n.comp = 3, tol = 1e-3, maxit = 500)
+
+# Strict tolerance (slower, more accurate)
+result_strict <- fastICA(X, n.comp = 3, tol = 1e-7, maxit = 500)
+
+cat("Loose (1e-3) - Iterations:", result_loose@misc$iterations, "\n")
+cat("Strict (1e-7) - Iterations:", result_strict@misc$iterations, "\n")
+```
+
+**Guidelines**:
+- Default `1e-4`: Good balance for most applications
+- `1e-3`: Fast approximation, exploratory analysis
+- `1e-6` to `1e-8`: High precision needed, publication-quality
+
+### Maximum Iterations
+
+```{r max-iterations}
+# May not converge with few iterations
+result_few <- fastICA(X, n.comp = 3, maxit = 10)
+cat("maxit=10 - Converged:", result_few@misc$converged,
+    "Iterations:", result_few@misc$iterations, "\n")
+
+# More iterations = more chances to converge
+result_many <- fastICA(X, n.comp = 3, maxit = 500)
+cat("maxit=500 - Converged:", result_many@misc$converged,
+    "Iterations:", result_many@misc$iterations, "\n")
+```
+
+**Guidelines**:
+- Default `200`: Sufficient for most problems
+- `50-100`: Fast approximate solutions
+- `500-1000`: Difficult convergence cases
+
+## Parallelization
+
+RcppICA uses OpenMP for parallel processing (parallel algorithm only):
+
+```{r parallelization, eval=FALSE}
+# Auto-detect cores (default)
+result_auto <- fastICA(X, n.comp = 3, alg.typ = "parallel", n.threads = 0)
+
+# Explicit thread count
+result_4threads <- fastICA(X, n.comp = 3, alg.typ = "parallel", n.threads = 4)
+
+# Single-threaded (for comparison)
+result_1thread <- fastICA(X, n.comp = 3, alg.typ = "parallel", n.threads = 1)
+```
+
+**Guidelines**:
+- `n.threads = 0` (default): Uses all available cores
+- `n.threads = 1`: Single-threaded (debugging, profiling)
+- `n.threads = N`: Use N specific cores
+
+**Note**: Deflation algorithm doesn't benefit as much from parallelization.
+
+## Reproducibility
+
+```{r reproducibility}
+# Same seed = identical results
+result1 <- fastICA(X, n.comp = 3, seed = 42, maxit = 200)
+result2 <- fastICA(X, n.comp = 3, seed = 42, maxit = 200)
+
+# Check they're identical
+all.equal(result1@S, result2@S)
+
+# Different seeds = different (but equivalent) results
+result3 <- fastICA(X, n.comp = 3, seed = 999, maxit = 200)
+
+# Different initialization, but should still recover sources
+cors_12 <- abs(cor(t(result1@S), t(result2@S)))
+cors_13 <- abs(cor(t(result1@S), t(result3@S)))
+
+cat("Same seed correlation:\n")
+print(round(apply(cors_12, 1, max), 3))
+
+cat("\nDifferent seed correlation:\n")
+print(round(apply(cors_13, 1, max), 3))
+```
+
+## Decision Tree
+
+Here's a quick reference for choosing parameters:
+
+```
+START
+  |
+  ├─ Do you know source distribution?
+  |    ├─ YES (sparse/heavy-tailed) → fun = "exp"
+  |    ├─ YES (light-tailed) → fun = "cube"
+  |    └─ NO/MIXED → fun = "logcosh" (default)
+  |
+  ├─ How many components?
+  |    ├─ Many (>5) → alg.typ = "parallel"
+  |    └─ Few (1-3) → alg.typ = "deflation"
+  |
+  ├─ Data quality?
+  |    ├─ Well-conditioned → whiten.method = "eigen"
+  |    └─ Unknown/Poor → whiten.method = "svd" (default)
+  |
+  ├─ Speed vs Accuracy?
+  |    ├─ SPEED → tol = 1e-3, maxit = 100
+  |    ├─ BALANCE → tol = 1e-4, maxit = 200 (default)
+  |    └─ ACCURACY → tol = 1e-7, maxit = 500
+  |
+  └─ Reproducibility needed?
+       ├─ YES → seed = <fixed number>
+       └─ NO → seed = NULL (default)
+```
+
+## Common Use Cases
+
+### Audio Source Separation
+
+```{r audio-separation, eval=FALSE}
+result <- fastICA(mixed_audio,
+                  n.comp = n_sources,
+                  alg.typ = "parallel",    # Fast, multiple sources
+                  fun = "logcosh",         # Robust default
+                  whiten.method = "svd",   # Stable
+                  maxit = 200)
+```
+
+### Financial Data (Sparse Returns)
+
+```{r financial, eval=FALSE}
+result <- fastICA(returns,
+                  n.comp = n_factors,
+                  alg.typ = "parallel",
+                  fun = "exp",             # Super-Gaussian
+                  whiten.method = "svd",
+                  tol = 1e-6,             # High precision
+                  maxit = 500)
+```
+
+### Image Processing
+
+```{r image-processing, eval=FALSE}
+result <- fastICA(image_pixels,
+                  n.comp = n_features,
+                  alg.typ = "parallel",
+                  fun = "logcosh",         # Robust
+                  alpha = 1.0,
+                  whiten.method = "svd",
+                  maxit = 300)
+```
+
+### Quick Exploratory Analysis
+
+```{r exploratory, eval=FALSE}
+result <- fastICA(data,
+                  n.comp = 5,
+                  alg.typ = "parallel",
+                  fun = "logcosh",
+                  tol = 1e-3,             # Fast convergence
+                  maxit = 100)            # Fewer iterations
+```
+
+### High-Precision Research
+
+```{r research, eval=FALSE}
+result <- fastICA(data,
+                  n.comp = n,
+                  alg.typ = "parallel",
+                  fun = "logcosh",
+                  alpha = 1.0,
+                  whiten.method = "svd",
+                  tol = 1e-8,             # Very strict
+                  maxit = 1000,           # Many iterations
+                  seed = 12345)           # Reproducible
+```
+
+## Troubleshooting Guide
+
+### Problem: Non-convergence
+
+**Try**:
+1. Increase `maxit` (e.g., 500-1000)
+2. Loosen `tol` (e.g., 1e-3)
+3. Switch algorithm type
+4. Try different nonlinearity
+5. Check data quality (NAs, Inf, constant columns)
+
+### Problem: Poor Source Recovery
+
+**Try**:
+1. Different nonlinearity function
+2. More components
+3. Check if sources are truly independent
+4. Verify data preprocessing (centering, scaling)
+5. Try both algorithm types
+
+### Problem: Slow Performance
+
+**Try**:
+1. Use parallel algorithm with OpenMP
+2. Loosen convergence tolerance
+3. Reduce `maxit`
+4. Extract fewer components with deflation
+5. Check thread settings (`n.threads = 0`)
+
+### Problem: Inconsistent Results
+
+**Try**:
+1. Set fixed seed for reproducibility
+2. Use stricter tolerance
+3. More iterations
+4. SVD whitening for stability
+
+## References
+
+- Hyvärinen, A., & Oja, E. (2000). Independent component analysis: algorithms and applications. *Neural networks*, 13(4-5), 411-430.
+- Hyvärinen, A. (1999). Fast and robust fixed-point algorithms for independent component analysis. *IEEE transactions on Neural Networks*, 10(3), 626-634.
+- Cardoso, J. F. (1999). High-order contrasts for independent component analysis. *Neural computation*, 11(1), 157-192.
+
+## Session Info
+
+```{r session-info}
+sessionInfo()
+```

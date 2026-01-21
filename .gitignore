@@ -1,0 +1,36 @@
+# R
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.Rproj
+
+# Package build artifacts
+*.tar.gz
+*.tgz
+*.zip
+.Rcheck/
+*.Rcheck/
+
+# Compiled Object files
+*.o
+*.so
+*.dll
+
+# RStudio files
+.Rproj.user/
+
+# macOS
+.DS_Store
+
+# Vignette outputs
+*.html
+*.pdf
+vignettes/*.R
+
+# src-* directories (package build)
+src-*
+
+# IDE
+.vscode/
+.idea/

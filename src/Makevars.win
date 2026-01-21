@@ -1,0 +1,14 @@
+# RcppICA Makevars - Windows configuration
+
+# C++ standard
+CXX_STD = CXX17
+
+# Include paths for RcppEigen and package headers
+PKG_CXXFLAGS = $(SHLIB_OPENMP_CXXFLAGS) \
+    -I../inst/include \
+    -DEIGEN_NO_DEBUG \
+    -DEIGEN_INITIALIZE_MATRICES_BY_ZERO \
+    -DNDEBUG
+
+# Link against OpenMP, BLAS, LAPACK
+PKG_LIBS = $(SHLIB_OPENMP_CXXFLAGS) $(LAPACK_LIBS) $(BLAS_LIBS) $(FLIBS)
