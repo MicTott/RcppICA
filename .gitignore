@@ -34,3 +34,6 @@ src-*
 # IDE
 .vscode/
 .idea/
+
+# Claude documentation
+.claude/
