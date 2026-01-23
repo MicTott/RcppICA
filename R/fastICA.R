@@ -129,6 +129,17 @@ fastICA <- function(X,
         stop("X must be a numeric matrix or dgCMatrix")
     }
 
+    # Check for NaN/Inf values
+    if (is_sparse) {
+        if (anyNA(X@x) || any(is.infinite(X@x))) {
+            stop("X contains NaN or Inf values")
+        }
+    } else {
+        if (anyNA(X) || any(is.infinite(X))) {
+            stop("X contains NaN or Inf values")
+        }
+    }
+
     n <- nrow(X)
     m <- ncol(X)
 

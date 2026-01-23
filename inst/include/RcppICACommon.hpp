@@ -23,26 +23,7 @@
 #include <omp.h>
 #endif
 
-// Numerical stability constants
-#ifndef TINY_NUM
-#define TINY_NUM 1e-15
-#define TINY_NUM_FOR_STABILITY 1e-15
-#endif
-
-// FastICA algorithm tuning parameters
-#ifndef FASTICA_PARAMS
-#define FASTICA_PARAMS
-#define FASTICA_TOL 1e-7
-#define FASTICA_MAXIT 500
-#define FASTICA_MAX_FINE_TUNE 5
-#define FASTICA_ALPHA_DEFAULT 1.0
-#endif
-
 // Eigen configuration - must be defined before including Eigen
-#ifndef EIGEN_INITIALIZE_MATRICES_BY_ZERO
-#define EIGEN_INITIALIZE_MATRICES_BY_ZERO
-#endif
-
 #ifndef EIGEN_NO_DEBUG
 #define EIGEN_NO_DEBUG
 #endif

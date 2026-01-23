@@ -62,7 +62,10 @@ public:
         //                          = [X'X - n*μμ'] / (n-1)
         // This avoids creating the dense n×m centered matrix
         Matrix mean_outer = result.mean * result.mean.transpose();
-        Matrix C = (XtX_raw / static_cast<Scalar>(n - 1)) - mean_outer;
+        const Scalar n_scalar = static_cast<Scalar>(n);
+        const Scalar nm1 = static_cast<Scalar>(n - 1);
+        Matrix C = XtX_raw / nm1;
+        C -= (n_scalar / nm1) * mean_outer;
 
         // Step 4: Use Spectra for top-k eigenvalues (unchanged from dense version)
         int k = std::min(n_components, m);
