@@ -15,6 +15,7 @@ struct WhiteningResult;
 
 // Spectra-based whitening (fastest - computes only top-k eigenvalues)
 // Uses Lanczos iteration for partial eigendecomposition
+// Optimized to avoid materializing the full n×m centered matrix
 template<typename Scalar = double>
 class SpectraWhitener {
 public:
@@ -26,15 +27,24 @@ public:
         const int n = X.rows();
         const int m = X.cols();
 
-        // Step 1: Center the data
+        // Step 1: Compute column means
         result.mean = X.colwise().mean();
-        Matrix X_centered = X.rowwise() - result.mean.transpose();
 
-        // Step 2: Compute covariance matrix: C = X^T * X / (n-1)
-        // This is m x m
-        Matrix C;
-        C.noalias() = X_centered.transpose() * X_centered;
-        C /= static_cast<Scalar>(n - 1);
+        // Step 2: Compute covariance WITHOUT materializing X_centered
+        // Mathematical identity: Cov(X) = [X'X - n*μμ'] / (n-1)
+        // This avoids allocating the n×m centered matrix (massive memory savings)
+        Matrix XtX;
+        XtX.noalias() = X.transpose() * X;  // m×m, delegates to BLAS DGEMM
+
+        // Compute mean outer product: μμ' (m×m, rank-1)
+        Matrix mean_outer;
+        mean_outer.noalias() = result.mean * result.mean.transpose();
+
+        // Combine: C = XtX/(n-1) - n/(n-1) * μμ'
+        const Scalar n_scalar = static_cast<Scalar>(n);
+        const Scalar nm1 = static_cast<Scalar>(n - 1);
+        Matrix C = XtX / nm1;
+        C -= (n_scalar / nm1) * mean_outer;
 
         // Step 3: Determine number of eigenvalues to compute
         int k = std::min(n_components, m);
@@ -60,7 +70,7 @@ public:
             // Check convergence
             if (eigs.info() != Spectra::CompInfo::Successful) {
                 // Fallback to Eigen if Spectra fails to converge
-                return fallbackToEigen(X, X_centered, n_components, n, m);
+                return fallbackToEigen(X, result.mean, C, n_components, n, m);
             }
 
             // Extract eigenvalues and eigenvectors (already in descending order)
@@ -82,35 +92,64 @@ public:
             // Dewhitening: K^{-1} = E * D^{1/2}
             result.K_inv = eigenvectors * eigenvalues.array().sqrt().matrix().asDiagonal();
 
-            // Step 6: Apply whitening
-            result.X_whitened.noalias() = X_centered * result.K;
+            // Step 6: Apply whitening in chunks to avoid full X_centered allocation
+            result.X_whitened = applyWhiteningChunked(X, result.mean, result.K, n, m, k);
 
         } catch (const std::exception& e) {
             // Fallback to Eigen if Spectra throws any exception
-            return fallbackToEigen(X, X_centered, n_components, n, m);
+            return fallbackToEigen(X, result.mean, C, n_components, n, m);
         }
 
         return result;
     }
 
 private:
+    // Apply whitening in chunks to avoid full matrix densification
+    Matrix applyWhiteningChunked(
+        const Matrix& X,
+        const Vector& mean,
+        const Matrix& K,
+        int n, int m, int k)
+    {
+        Matrix X_whitened(n, k);
+
+        // Determine chunk size based on available memory
+        // Target: ~100MB per chunk at double precision
+        // 100MB / 8 bytes / m columns ≈ chunk_size rows
+        const int target_chunk_mb = 100;
+        const int chunk_size = std::max(1000, std::min(
+            static_cast<int>((target_chunk_mb * 1024 * 1024) / (8 * m)),
+            n
+        ));
+
+        // Process data in chunks
+        for (int start = 0; start < n; start += chunk_size) {
+            int end = std::min(start + chunk_size, n);
+            int chunk_rows = end - start;
+
+            // Center chunk and apply whitening
+            Matrix X_chunk_centered = X.middleRows(start, chunk_rows).rowwise() - mean.transpose();
+
+            // Apply whitening to chunk
+            X_whitened.middleRows(start, chunk_rows).noalias() = X_chunk_centered * K;
+        }
+
+        return X_whitened;
+    }
+
     // Fallback to full eigendecomposition if Spectra fails
     WhiteningResult<Scalar> fallbackToEigen(
         const Matrix& X,
-        const Matrix& X_centered,
+        const Vector& mean,
+        const Matrix& C,
         int n_components,
         int n,
         int m)
     {
         WhiteningResult<Scalar> result;
-        result.mean = X.colwise().mean();
+        result.mean = mean;
 
-        // Compute covariance matrix
-        Matrix C;
-        C.noalias() = X_centered.transpose() * X_centered;
-        C /= static_cast<Scalar>(n - 1);
-
-        // Full eigendecomposition
+        // Full eigendecomposition (covariance C already computed)
         Eigen::SelfAdjointEigenSolver<Matrix> eig(C);
 
         int k = std::min(n_components, m);
@@ -134,8 +173,8 @@ private:
         // Dewhitening
         result.K_inv = E_k * D_k.array().sqrt().matrix().asDiagonal();
 
-        // Apply whitening
-        result.X_whitened.noalias() = X_centered * result.K;
+        // Apply whitening in chunks
+        result.X_whitened = applyWhiteningChunked(X, mean, result.K, n, m, k);
 
         return result;
     }

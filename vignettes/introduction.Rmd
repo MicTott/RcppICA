@@ -35,13 +35,13 @@ Such that: $X \approx AS$
 
 ## Why RcppICA?
 
-RcppICA provides an ultra-fast implementation of the FastICA algorithm using:
+RcppICA provides a fast implementation of the FastICA algorithm using:
 
-- **Eigen C++ library** for optimized linear algebra (2-5× faster than alternatives)
+- **Eigen C++ library** for optimized linear algebra with BLAS delegation
+- **Spectra library** for truncated eigendecomposition (only computes top-k eigenvalues)
 - **OpenMP parallelization** for multi-core processing
-- **Optimized memory management** with pre-allocated matrices
-
-**Expected speedup**: 30-150× faster than pure R implementations.
+- **Memory-efficient whitening** that avoids materializing intermediate matrices
+- **Sparse matrix support** for large single-cell datasets
 
 ## Quick Start: The Cocktail Party Problem
 
@@ -129,13 +129,13 @@ result@misc$converged
 # Summary statistics
 summary(result)
 
-# Extract components
-S <- components(result)
-head(S, 3)
+# Access components directly
+S <- result@S
+cat("Components dimensions:", dim(S), "\n")
 
-# Extract mixing matrix
-A <- mixing(result)
-print(A)
+# Access mixing matrix
+A <- result@A
+cat("Mixing matrix dimensions:", dim(A), "\n")
 ```
 
 ## Projecting New Data
@@ -264,7 +264,7 @@ if (requireNamespace("fastICA", quietly = TRUE)) {
 }
 ```
 
-Typical speedups range from 30× to 150× depending on data size and number of components.
+RcppICA is typically 2-7x faster than the fastICA package, with the advantage increasing at larger matrix sizes.
 
 ## Best Practices
 

@@ -1,122 +1,71 @@
-# RcppICA 0.2.0
-
-## Major New Features
-
-* **Sparse matrix support**: Memory-efficient ICA for large single-cell datasets
-  - Enables direct ICA on 1M+ cell sparse expression matrices
-  - See detailed release notes below
-
-# RcppICA 0.1.0 (Initial Release)
-
-## New Features
-
-* **Sparse matrix support (v0.2.0)**: Memory-efficient ICA for large datasets
-  - Computes covariance without materializing centered matrix
-  - 5-10x memory savings for typical scRNA-seq data (5-10% sparsity)
-  - 2-4x speedup by avoiding densification
-  - Enables ICA on 1M+ cell datasets on standard workstations
-  - Automatic routing: sparse dgCMatrix stays sparse until final whitening step
-
-* **Spectra library integration**: Fast truncated eigendecomposition using Lanczos iteration
-  - Computes only top-k eigenvalues instead of all m
-  - 2-3x speedup over full eigendecomposition
-  - Header-only library (no external dependencies)
-
-* **Multiple whitening methods**:
-  - `spectra` (default): Fastest, uses truncated eigendecomposition
-  - `eigen`: Full eigendecomposition of covariance matrix
-  - `svd`: SVD-based, most numerically stable
-
-* **Comprehensive single-cell RNA-seq support**:
-  - New vignette: "ICA on PCA Components vs Full Expression Matrix"
-  - Integration examples for SingleCellExperiment and Seurat workflows
-  - Performance comparison using real scRNA-seq data (Zeisel brain dataset)
-  - Demonstrates gene weight calculation from PCA→ICA pipeline
-
-* **Algorithm options**:
-  - Parallel (symmetric orthogonalization) - default
-  - Deflation (sequential extraction)
-
-* **Nonlinearity functions**:
-  - `logcosh` (default, most robust)
-  - `exp` (good for super-Gaussian)
-  - `cube` (kurtosis-based)
-
-* **OpenMP parallelization**: Multi-threaded computation for parallel algorithm
+# RcppICA 0.2.1
 
 ## Performance
 
-* **Sparse matrices**: Major improvements for large, sparse datasets
-  - 100K×20K sparse (10% dense): 2.5x faster, 8x less memory
-  - 500K×20K sparse (8% dense): 3.2x faster, 12x less memory
-  - 1M×20K sparse (5% dense): 4.1x faster, 16x less memory
-  - Handles datasets that would OOM with dense implementation
+* **Eliminated dense X_centered allocation in whitening**: All three whitening
+  methods (Spectra, Eigen, SVD) now compute covariance via the identity
+  `Cov(X) = [X'X - n*mu*mu'] / (n-1)`, avoiding the n x m centered matrix
+  allocation that dominated memory at large scales.
 
-* **Dense matrices**: Competitive with base fastICA
-  - ~1.0x average performance across dataset sizes
-  - 1.36x speedup on 1000×500 data
-  - 2.5x faster whitening compared to full eigendecomposition
-  - Scalable via truncated eigendecomposition
+* **Chunked whitening application**: Whitening is applied in ~100MB chunks
+  rather than allocating a full n x k result matrix upfront, bounding peak
+  memory regardless of dataset size.
+
+* **BLAS delegation enabled**: Added `EIGEN_USE_BLAS` compilation flag so
+  Eigen delegates large matrix multiplications to vendor-optimized BLAS
+  (Accelerate on macOS, MKL on Linux/Windows).
+
+* **Removed EIGEN_INITIALIZE_MATRICES_BY_ZERO**: Eliminated unnecessary
+  zero-initialization of all matrix allocations.
+
+* **Sparse whitening improvements**:
+  - Density-adaptive covariance: uses BLAS dense multiply when density > 5%,
+    sparse multiply only at high sparsity (< 5% non-zero)
+  - Eliminated double-copy in chunked whitening via precomputed mean
+    contribution vector
 
 ## Documentation
 
-* **Three comprehensive vignettes**:
-  - Introduction to RcppICA: Basic usage and examples
-  - Algorithm Details: FastICA theory and implementation
-  - ICA on PCA vs Expression: Single-cell best practices
+* Fixed vignettes: corrected default whitening method references, removed
+  inaccurate performance claims, fixed broken code examples.
 
-* **Integration guides**:
-  - SingleCellExperiment workflow
-  - Seurat integration examples
-  - Gene weight calculation from PCA embeddings
+* Removed vignettes with unresolvable dependencies (ica-vs-nmf-modules,
+  snRNAseq-workflow).
 
-* **Honest performance claims**: Based on real benchmarks, no exaggeration
+* Cleaned up README: accurate performance table, corrected feature
+  descriptions.
 
-## Technical Details
+## Internal
 
-* **C++ implementation**: Eigen library for linear algebra, Spectra for eigensolvers
-* **S4 classes**: Clean object-oriented interface
-* **Comprehensive testing**: 126 unit tests covering edge cases and correctness
-* **Robust error handling**: Automatic fallback to full eigendecomposition if Spectra fails
-* **Reproducibility**: Seed control for deterministic results
+* Reduced Suggests dependencies (removed igraph, scRNAseq, scran, ggplot2,
+  pheatmap, patchwork that were only needed by removed vignettes).
 
-## Package Infrastructure
+# RcppICA 0.2.0
 
-* **License**: GPL-3
-* **SystemRequirements**: GNU make, C++17
-* **Minimal dependencies**: Rcpp, RcppEigen, Matrix (core); Single-cell packages optional
-* **Platform support**: Linux, macOS, Windows
+## New Features
 
-## Known Limitations
+* **Sparse matrix support**: Pass `dgCMatrix` objects directly to `fastICA()`.
+  Covariance is computed without materializing the dense centered matrix,
+  enabling ICA on large sparse datasets.
 
-* ~~Sparse matrix support limited (densification occurs during whitening)~~ **FIXED in v0.2.0**
-* Performance advantage most pronounced when k << m (few components from many variables)
-* Final whitening step still densifies (chunked processing minimizes impact)
-* Best speedup observed for datasets with 5-15% sparsity (typical for scRNA-seq)
+* **Spectra library integration**: Truncated eigendecomposition via Lanczos
+  iteration computes only the top-k eigenvalues needed for whitening.
 
-## Notes for Users
+* **Three whitening methods**:
+  - `"spectra"` (default): Truncated eigendecomposition, fastest for k << m
+  - `"eigen"`: Full eigendecomposition of covariance matrix
+  - `"svd"`: SVD-based, most numerically stable
 
-* **NEW: Direct ICA on expression matrices**: Now practical for large sparse datasets
-  - Use sparse dgCMatrix from SingleCellExperiment or Seurat
-  - Enables gene module identification on 1M+ cells
-  - Automatically uses sparse-aware whitening
+# RcppICA 0.1.0
 
-* **Recommended workflow for scRNA-seq**:
-  - **For exploratory analysis**: Run ICA on PCA components (30-50 PCs)
-    - 5-10x faster, filters technical noise
-  - **For gene module identification**: Run ICA directly on sparse expression matrix
-    - Preserves all gene-level information
-    - Now feasible with sparse implementation
+* Initial release.
 
-* **Gene weights from PCA→ICA**: Calculate via `pca_loadings %*% ica_result@A`
+* **FastICA algorithm** with parallel (symmetric) and deflation modes.
 
-* **Default parameters**: Sensible defaults chosen for typical use cases
-  - `whiten.method = "spectra"` (fastest)
-  - `alg.typ = "parallel"` (most stable)
-  - `fun = "logcosh"` (most robust)
+* **Nonlinearity functions**: logcosh, exp, cube.
 
-## Acknowledgments
+* **OpenMP parallelization** for the parallel algorithm.
 
-* **Spectra library**: Yixuan Qiu (https://spectralib.org/)
-* **Eigen library**: Eigen development team
-* **FastICA algorithm**: Hyvärinen & Oja (2000)
+* **S4 class interface** (`ICAResult`) with print, summary, and predict methods.
+
+* **Reproducibility** via seed parameter.

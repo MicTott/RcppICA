@@ -20,7 +20,7 @@ knitr::opts_chunk$set(
 
 ## Introduction
 
-RcppICA v0.2.0 introduces **sparse matrix support**, enabling memory-efficient ICA on extremely large single-cell datasets (1M+ cells). This vignette demonstrates how sparse matrices dramatically reduce memory usage and improve performance for large-scale gene module identification.
+RcppICA supports **sparse matrix input**, enabling memory-efficient ICA on large single-cell datasets. This vignette demonstrates how sparse matrices reduce memory usage for large-scale gene module identification.
 
 ### Why Sparse Matrices Matter
 
@@ -28,13 +28,13 @@ Single-cell RNA-seq data is inherently sparse:
 
 - **Typical sparsity**: 90-95% zeros (dropout events, low expression)
 - **Memory explosion**: Dense representation wastes memory on zeros
-- **Scalability bottleneck**: 1M cells × 20K genes = 160GB dense, 16GB sparse
+- **Scalability bottleneck**: 1M cells x 20K genes = 160GB dense vs ~16GB sparse
 
 **RcppICA's sparse implementation**:
-- Computes covariance without materializing dense centered matrix
-- 5-10x memory savings
-- 2-4x speedup
-- Enables direct ICA on expression matrices that would otherwise cause OOM
+- Computes covariance without materializing the dense centered matrix
+- Significant memory savings (proportional to sparsity)
+- Enables ICA on expression matrices that would otherwise cause OOM
+- Automatically routes to the optimal computation path based on data density
 
 ## Quick Start: Sparse vs Dense
 
@@ -75,7 +75,7 @@ cat(sprintf("Memory ratio: %.1fx savings with sparse\n",
 ```{r sparse_ica}
 # Sparse ICA - automatically uses sparse-aware implementation
 time_sparse <- system.time({
-  result_sparse <- fastICA(X_dense, n.comp = 10, verbose = FALSE, seed = 123)
+  result_sparse <- fastICA(X_sparse, n.comp = 10, verbose = FALSE, seed = 123)
 })
 
 cat(sprintf("\nSparse ICA completed in %.3f seconds\n", time_sparse["elapsed"]))
@@ -165,10 +165,13 @@ axis(2, at = seq(0, 1, length.out = 10), labels = 1:10)
 Compare performance across dataset sizes:
 
 ```{r scalability}
+library(RcppICA)
+library(Matrix)
+
 test_sizes <- data.frame(
-  n_cells = c(5000, 10000, 25000, 50000),
-  n_genes = c(1000, 2000, 5000, 10000),
-  sparsity = c(0.10, 0.10, 0.08, 0.05)
+  n_cells = c(5000, 10000, 25000),
+  n_genes = c(1000, 2000, 5000),
+  sparsity = c(0.10, 0.10, 0.05)
 )
 
 results <- data.frame()
@@ -188,11 +191,11 @@ for (i in 1:nrow(test_sizes)) {
 
   # Time sparse ICA
   t <- system.time({
-    res <- fastICA(X_sp, n.comp = 10, verbose = FALSE, seed = 42)
+    res <- RcppICA::fastICA(X_sp, n.comp = 10, verbose = FALSE, seed = 42)
   })
 
   results <- rbind(results, data.frame(
-    Dataset = sprintf("%dK×%d", n/1000, m),
+    Dataset = sprintf("%dK x %d", n/1000, m),
     Sparsity = sprintf("%.0f%%", (1-sp)*100),
     Memory_MB = round(object.size(X_sp) / 1024^2, 1),
     Time_sec = round(t["elapsed"], 3),
@@ -403,17 +406,16 @@ For 1M cells × 20K genes, 5% sparse:
 
 RcppICA's sparse matrix support enables:
 
-✓ **Direct ICA on 1M+ cell datasets** on standard workstations
-✓ **5-10x memory savings** for typical scRNA-seq sparsity
-✓ **2-4x speed improvement** by avoiding densification
-✓ **Automatic optimization** - just pass sparse matrix, we handle the rest
+- **Direct ICA on large datasets** without materializing the full centered matrix
+- **Memory savings** proportional to data sparsity (significant for >90% sparse data)
+- **Automatic optimization** - just pass a sparse matrix, the optimal path is selected
 
 ### Key Takeaways
 
-1. **Always use sparse matrices** for scRNA-seq data when possible
-2. **Sparse implementation is production-ready** - same accuracy, better performance
-3. **Gene module identification** now practical on atlas-scale datasets
-4. **No code changes needed** - automatic sparse/dense routing
+1. **Use sparse matrices** for scRNA-seq data to save memory
+2. **Sparse implementation produces identical results** to the dense path
+3. **No code changes needed** - automatic sparse/dense routing
+4. **Best gains at high sparsity** (>95% zeros, typical for scRNA-seq)
 
 ### Next Steps
 

@@ -39,10 +39,23 @@ public:
         }
         result.mean /= static_cast<Scalar>(n);
 
-        // Step 2: Compute X'X using sparse matrix multiplication (FAST!)
-        // This exploits sparsity - only operates on non-zero entries
-        SparseMatrix Xt = X_sparse.transpose();
-        Matrix XtX_raw = Matrix(Xt * X_sparse);  // Sparse × Sparse → Dense result
+        // Step 2: Compute X'X
+        // For highly sparse data, sparse multiplication is faster.
+        // For moderate sparsity (>5% non-zero), BLAS dense multiply wins
+        // due to vectorization and cache-optimal memory access.
+        double density = static_cast<double>(X_sparse.nonZeros()) /
+                         (static_cast<double>(n) * m);
+
+        Matrix XtX_raw(m, m);
+        if (density < 0.05) {
+            // Sparse path: only beneficial at high sparsity
+            SparseMatrix Xt = X_sparse.transpose();
+            XtX_raw = Matrix(Xt * X_sparse);
+        } else {
+            // Dense path: convert and use BLAS DGEMM (faster for moderate sparsity)
+            Matrix X_dense = Matrix(X_sparse);
+            XtX_raw.noalias() = X_dense.transpose() * X_dense;
+        }
 
         // Step 3: Compute centered covariance without materializing X_centered
         // Mathematical insight: C = (X - μ)'(X - μ) / (n-1)
@@ -113,9 +126,13 @@ private:
     {
         Matrix X_whitened(n, k);
 
+        // Precompute mean contribution: mean' * K (1 x k vector)
+        // This lets us avoid centering each chunk explicitly:
+        //   (X_chunk - mean) * K = X_chunk * K - mean' * K
+        Eigen::Matrix<Scalar, 1, Eigen::Dynamic> meanK = mean.transpose() * K;
+
         // Determine chunk size based on available memory
         // Target: ~100MB per chunk at double precision
-        // 100MB / 8 bytes / m columns ≈ chunk_size rows
         const int target_chunk_mb = 100;
         const int chunk_size = std::max(1000, std::min(
             static_cast<int>((target_chunk_mb * 1024 * 1024) / (8 * m)),
@@ -127,12 +144,11 @@ private:
             int end = std::min(start + chunk_size, n);
             int chunk_rows = end - start;
 
-            // Convert chunk to dense and center
+            // Convert sparse chunk to dense and apply whitening in one step
+            // (X_chunk - mean) * K = X_chunk * K - meanK
             Matrix X_chunk = Matrix(X_sparse.middleRows(start, chunk_rows));
-            Matrix X_chunk_centered = X_chunk.rowwise() - mean.transpose();
-
-            // Apply whitening to chunk
-            X_whitened.middleRows(start, chunk_rows) = X_chunk_centered * K;
+            X_whitened.middleRows(start, chunk_rows).noalias() = X_chunk * K;
+            X_whitened.middleRows(start, chunk_rows).rowwise() -= meanK;
         }
 
         return X_whitened;

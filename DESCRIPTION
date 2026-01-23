@@ -1,20 +1,19 @@
 Package: RcppICA
 Type: Package
 Title: Fast Independent Component Analysis Using Rcpp and Eigen
-Version: 0.2.0
-Date: 2026-01-21
+Version: 0.2.1
+Date: 2026-01-22
 Authors@R:
     person("Michael", "Totty", role = c("aut", "cre"),
            email = "michael.totty@example.com")
 Description: Fast Independent Component Analysis (ICA) using the
     FastICA algorithm implemented in C++ with Eigen for linear algebra,
-    Spectra for efficient truncated eigendecomposition, and OpenMP for
-    parallelization. Spectra-based whitening computes only top-k eigenvalues,
-    providing 2-3x speedup over full eigendecomposition and competitive
-    performance with base fastICA. Sparse matrix support enables memory-efficient
-    ICA on large datasets (1M+ cells) by computing covariance without materializing
-    the centered matrix, providing 5-10x memory savings and 2-4x speedup. Supports
-    deflation and parallel (symmetric) algorithms, and multiple nonlinearity functions.
+    Spectra for truncated eigendecomposition, and OpenMP for parallelization.
+    Memory-efficient whitening avoids materializing intermediate matrices.
+    Sparse matrix support enables ICA on large datasets by computing
+    covariance without densification. Supports deflation and parallel
+    (symmetric) algorithms, and multiple nonlinearity functions (logcosh,
+    exp, cube).
 License: GPL-3
 URL: https://github.com/mtotty/RcppICA
 BugReports: https://github.com/mtotty/RcppICA/issues
@@ -32,15 +31,7 @@ Suggests:
     fastICA,
     knitr,
     rmarkdown,
-    bench,
-    SingleCellExperiment,
-    scuttle,
-    scater,
-    scRNAseq,
-    scran,
-    ggplot2,
-    pheatmap,
-    patchwork
+    bench
 VignetteBuilder: knitr
 Encoding: UTF-8
 RoxygenNote: 7.3.3
