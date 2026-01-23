@@ -21,7 +21,7 @@ Fast Independent Component Analysis (ICA) for R, implemented in C++ with Eigen, 
 
 ```r
 # Install from GitHub
-devtools::install_github("mtotty/RcppICA")
+devtools::install_github("MicTott/RcppICA")
 ```
 
 ### System Requirements
@@ -121,7 +121,12 @@ browseVignettes("RcppICA")
 
 GPL-3
 
+## Acknowledgments
+
+This package was heavily inspired by and modeled around the NMF implementation in [RcppML](https://github.com/zdebruine/RcppML).
+
 ## References
 
 - Hyvarinen A, Oja E (2000). Independent Component Analysis: Algorithms and Applications. *Neural Networks*.
+- DeBruine ZJ, Melber K, Bhatt DK, et al. (2021). Fast and robust non-negative matrix factorization for single-cell experiments. *bioRxiv*.
 - Spectra library: https://spectralib.org/
