@@ -87,7 +87,7 @@ public:
     {
 #ifdef _OPENMP
         if (n_threads_ <= 0) {
-            n_threads_ = omp_get_max_threads();
+            n_threads_ = 1;  // Safe default; user must opt-in to parallelism
         }
         omp_set_num_threads(n_threads_);
 #endif
